@@ -565,5 +565,167 @@
       }
     }
   },
-  "generated_at": "2026-07-16T14:52:59+07:00"
+  "postprocessing": {
+    "method": {
+      "weights": {
+        "1": 0.6,
+        "2": 0.3,
+        "3": 0.1
+      },
+      "rolling_bias_window_days": 14,
+      "minimum_history_days": 7,
+      "no_lookahead": true,
+      "hourly_bias_groups": "location + UTC hour",
+      "daily_bias_groups": "location"
+    },
+    "sample_counts": {
+      "common_hourly": 6120,
+      "corrected_hourly": 5616,
+      "common_daily": 255,
+      "corrected_daily": 234
+    },
+    "temperature_2m": {
+      "day1": {
+        "n": 6120,
+        "mae": 1.215326797385621,
+        "rmse": 1.584416554127564,
+        "bias": -0.736078431372549,
+        "correlation": 0.9198386017438753,
+        "within_tolerance": 0.8357843137254902
+      },
+      "weighted_ensemble": {
+        "n": 6120,
+        "mae": 1.1988872549019611,
+        "rmse": 1.523595887400782,
+        "bias": -0.8007336601307198,
+        "correlation": 0.9318134551828373,
+        "within_tolerance": 0.8303921568627451
+      },
+      "day1_matched_corrected_sample": {
+        "n": 5616,
+        "mae": 1.220210113960114,
+        "rmse": 1.5944844615127793,
+        "bias": -0.732318376068376,
+        "correlation": 0.905233414923408,
+        "within_tolerance": 0.8363603988603988
+      },
+      "weighted_ensemble_rolling_bias": {
+        "n": 5616,
+        "mae": 0.9678633567139177,
+        "rmse": 1.2869554438815936,
+        "bias": 0.042402902974083584,
+        "correlation": 0.9250905024190419,
+        "within_tolerance": 0.8894230769230769
+      }
+    },
+    "relative_humidity_2m": {
+      "day1": {
+        "n": 6120,
+        "mae": 5.805555555555555,
+        "rmse": 7.837191373665121,
+        "bias": 0.8741830065359477,
+        "correlation": 0.8910515559253043,
+        "within_tolerance": 0.8411764705882353
+      },
+      "weighted_ensemble": {
+        "n": 6120,
+        "mae": 5.5197875816993465,
+        "rmse": 7.296798138354618,
+        "bias": 1.3059640522875797,
+        "correlation": 0.9048730414594394,
+        "within_tolerance": 0.8455882352941176
+      },
+      "day1_matched_corrected_sample": {
+        "n": 5616,
+        "mae": 5.916132478632479,
+        "rmse": 7.974127947569974,
+        "bias": 1.1579415954415955,
+        "correlation": 0.8608767162720097,
+        "within_tolerance": 0.8345797720797721
+      },
+      "weighted_ensemble_rolling_bias": {
+        "n": 5616,
+        "mae": 5.3148934465641196,
+        "rmse": 6.9726812893520025,
+        "bias": -0.011465814525376487,
+        "correlation": 0.8860389265513074,
+        "within_tolerance": 0.8607549857549858
+      }
+    },
+    "wind_speed_max_daily": {
+      "day1": {
+        "n": 255,
+        "mae": 4.509411764705883,
+        "rmse": 5.505807985085155,
+        "bias": 4.110980392156862,
+        "correlation": 0.6325308164970429,
+        "within_tolerance": 0.6235294117647059
+      },
+      "weighted_ensemble": {
+        "n": 255,
+        "mae": 4.358156862745098,
+        "rmse": 5.077661149101822,
+        "bias": 4.066627450980391,
+        "correlation": 0.6936374368083387,
+        "within_tolerance": 0.611764705882353
+      },
+      "day1_matched_corrected_sample": {
+        "n": 234,
+        "mae": 4.684615384615385,
+        "rmse": 5.691056110962152,
+        "bias": 4.312820512820513,
+        "correlation": 0.6446260879997249,
+        "within_tolerance": 0.5897435897435898
+      },
+      "weighted_ensemble_rolling_bias": {
+        "n": 234,
+        "mae": 2.508409174159174,
+        "rmse": 3.1726387228013815,
+        "bias": 0.28083014824681485,
+        "correlation": 0.65271186906865,
+        "within_tolerance": 0.9017094017094017
+      }
+    },
+    "precipitation_sum_daily": {
+      "day1": {
+        "n": 255,
+        "mae": 3.532941176470588,
+        "rmse": 5.813928508838267,
+        "bias": 0.4356862745098039,
+        "correlation": 0.4307511647413867,
+        "within_tolerance": 0.792156862745098
+      },
+      "weighted_ensemble": {
+        "n": 255,
+        "mae": 3.2490196078431373,
+        "rmse": 5.172676480181943,
+        "bias": 0.5891529411764705,
+        "correlation": 0.47504844134315954,
+        "within_tolerance": 0.792156862745098
+      },
+      "day1_rain_event": {
+        "threshold": 1.0,
+        "accuracy": 0.7215686274509804,
+        "precision": 0.7668711656441718,
+        "recall": 0.7911392405063291,
+        "f1": 0.7788161993769471,
+        "tp": 125,
+        "tn": 59,
+        "fp": 38,
+        "fn": 33
+      },
+      "weighted_ensemble_rain_event": {
+        "threshold": 1.0,
+        "accuracy": 0.7372549019607844,
+        "precision": 0.7541899441340782,
+        "recall": 0.8544303797468354,
+        "f1": 0.8011869436201781,
+        "tp": 135,
+        "tn": 53,
+        "fp": 44,
+        "fn": 23
+      }
+    }
+  },
+  "generated_at": "2026-07-17T13:27:51+07:00"
 }

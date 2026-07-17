@@ -3,11 +3,14 @@ from datetime import date, datetime
 
 from backtest import (
     continuous_metrics,
+    ensemble_rows,
     expected_counts,
     lead_day,
     lead_range,
     required_run_dates,
+    rolling_bias_correct,
     verification_window,
+    weighted_value,
 )
 
 
@@ -43,6 +46,40 @@ class BacktestTest(unittest.TestCase):
         self.assertAlmostEqual(metrics["mae"], 2 / 3)
         self.assertAlmostEqual(metrics["bias"], -2 / 3)
         self.assertAlmostEqual(metrics["rmse"], (2 / 3) ** 0.5)
+
+    def test_weighted_day_1_2_3_ensemble(self):
+        leads = {
+            1: {"forecast": 10.0},
+            2: {"forecast": 20.0},
+            3: {"forecast": 30.0},
+        }
+        self.assertAlmostEqual(weighted_value(leads, "forecast", {1: 0.6, 2: 0.3, 3: 0.1}), 15.0)
+        rows = [
+            {"location": "x", "valid": "2026-01-04", "lead_day": day, "forecast": value, "actual": 12.0}
+            for day, value in ((1, 10.0), (2, 20.0), (3, 30.0))
+        ]
+        baseline, ensemble = ensemble_rows(rows, "valid", ("forecast",), ("actual",))
+        self.assertEqual(baseline[0]["forecast"], 10.0)
+        self.assertEqual(ensemble[0]["forecast"], 15.0)
+        self.assertEqual(ensemble[0]["actual"], 12.0)
+
+    def test_rolling_bias_correction_has_no_lookahead(self):
+        rows = [
+            {"location": "x", "date": "2026-01-01", "forecast": 12.0, "actual": 10.0},
+            {"location": "x", "date": "2026-01-02", "forecast": 15.0, "actual": 11.0},
+            {"location": "x", "date": "2026-01-03", "forecast": 17.0, "actual": 12.0},
+        ]
+        corrected = rolling_bias_correct(
+            rows,
+            "date",
+            (("forecast", "actual"),),
+            hourly=False,
+            window=2,
+            min_history=1,
+        )
+        self.assertEqual(len(corrected), 2)
+        self.assertAlmostEqual(corrected[0]["corrected_forecast"], 13.0)
+        self.assertAlmostEqual(corrected[1]["corrected_forecast"], 14.0)
 
 
 if __name__ == "__main__":

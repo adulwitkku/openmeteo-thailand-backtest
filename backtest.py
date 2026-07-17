@@ -11,7 +11,7 @@ import math
 import statistics
 import subprocess
 import sys
-from collections import defaultdict
+from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -27,6 +27,9 @@ VARIABLES = ("temperature_2m", "relative_humidity_2m", "precipitation", "wind_sp
 LEAD_RANGES = (("1-3 days", 1, 3), ("4-5 days", 4, 5), ("6-7 days", 6, 7))
 FORECAST_MODEL = "ecmwf_ifs"
 REFERENCE_MODEL = "era5"
+ENSEMBLE_WEIGHTS = {1: 0.60, 2: 0.30, 3: 0.10}
+BIAS_WINDOW_DAYS = 14
+BIAS_MIN_HISTORY = 7
 
 
 def subtract_months(value: date, months: int) -> date:
@@ -295,6 +298,163 @@ def aggregate_daily(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return daily
 
 
+def weighted_value(leads: dict[int, dict[str, Any]], field: str, weights: dict[int, float]) -> float:
+    return sum(weights[day] * float(leads[day][field]) for day in weights)
+
+
+def ensemble_rows(
+    rows: list[dict[str, Any]],
+    timestamp_field: str,
+    forecast_fields: tuple[str, ...],
+    actual_fields: tuple[str, ...],
+    weights: dict[int, float] = ENSEMBLE_WEIGHTS,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return matched Day-1 baselines and weighted Day-1/2/3 ensembles."""
+    groups: dict[tuple[str, str], dict[int, dict[str, Any]]] = defaultdict(dict)
+    for row in rows:
+        day = int(row["lead_day"])
+        if day in weights:
+            groups[(row["location"], row[timestamp_field])][day] = row
+    baseline: list[dict[str, Any]] = []
+    ensemble: list[dict[str, Any]] = []
+    for (location, timestamp), leads in sorted(groups.items(), key=lambda item: (item[0][1], item[0][0])):
+        if not all(day in leads for day in weights):
+            continue
+        day1 = leads[1]
+        base: dict[str, Any] = {"location": location, timestamp_field: timestamp}
+        combined: dict[str, Any] = {"location": location, timestamp_field: timestamp}
+        for field in forecast_fields:
+            base[field] = float(day1[field])
+            combined[field] = weighted_value(leads, field, weights)
+        for field in actual_fields:
+            base[field] = float(day1[field])
+            combined[field] = float(day1[field])
+        baseline.append(base)
+        ensemble.append(combined)
+    return baseline, ensemble
+
+
+def rolling_bias_correct(
+    rows: list[dict[str, Any]],
+    timestamp_field: str,
+    field_pairs: tuple[tuple[str, str], ...],
+    *,
+    hourly: bool,
+    window: int = BIAS_WINDOW_DAYS,
+    min_history: int = BIAS_MIN_HISTORY,
+) -> list[dict[str, Any]]:
+    """Apply walk-forward bias correction using only observations before each row."""
+    histories: dict[tuple[str, str, str], deque[float]] = defaultdict(lambda: deque(maxlen=window))
+    corrected: list[dict[str, Any]] = []
+    for row in sorted(rows, key=lambda item: (item[timestamp_field], item["location"])):
+        bucket = row[timestamp_field][11:13] if hourly else "daily"
+        history_sets = [histories[(row["location"], bucket, forecast_field)] for forecast_field, _ in field_pairs]
+        if all(len(history) >= min_history for history in history_sets):
+            output = dict(row)
+            for (forecast_field, _), history in zip(field_pairs, history_sets):
+                output[f"corrected_{forecast_field}"] = float(row[forecast_field]) - statistics.fmean(history)
+            corrected.append(output)
+        for (forecast_field, actual_field), history in zip(field_pairs, history_sets):
+            history.append(float(row[forecast_field]) - float(row[actual_field]))
+    return corrected
+
+
+def postprocessing_summary(hourly: list[dict[str, Any]], daily: list[dict[str, Any]]) -> dict[str, Any]:
+    hourly_forecasts = ("forecast_temperature_2m", "forecast_relative_humidity_2m")
+    hourly_actuals = ("actual_temperature_2m", "actual_relative_humidity_2m")
+    daily_forecasts = ("forecast_precipitation_sum", "forecast_wind_speed_max")
+    daily_actuals = ("actual_precipitation_sum", "actual_wind_speed_max")
+    baseline_hourly, ensemble_hourly = ensemble_rows(
+        hourly, "valid_time_utc", hourly_forecasts, hourly_actuals
+    )
+    baseline_daily, ensemble_daily = ensemble_rows(
+        daily, "valid_date_utc", daily_forecasts, daily_actuals
+    )
+    corrected_hourly = rolling_bias_correct(
+        ensemble_hourly,
+        "valid_time_utc",
+        tuple(zip(hourly_forecasts, hourly_actuals)),
+        hourly=True,
+    )
+    corrected_daily = rolling_bias_correct(
+        ensemble_daily,
+        "valid_date_utc",
+        (("forecast_wind_speed_max", "actual_wind_speed_max"),),
+        hourly=False,
+    )
+    corrected_hourly_keys = {(row["location"], row["valid_time_utc"]) for row in corrected_hourly}
+    corrected_daily_keys = {(row["location"], row["valid_date_utc"]) for row in corrected_daily}
+    matched_baseline_hourly = [
+        row for row in baseline_hourly if (row["location"], row["valid_time_utc"]) in corrected_hourly_keys
+    ]
+    matched_baseline_daily = [
+        row for row in baseline_daily if (row["location"], row["valid_date_utc"]) in corrected_daily_keys
+    ]
+
+    def continuous_result(rows_: list[dict[str, Any]], forecast_field: str, actual_field: str, tolerance: float) -> dict[str, Any]:
+        result = continuous_metrics(
+            [row[forecast_field] for row in rows_], [row[actual_field] for row in rows_]
+        )
+        result["within_tolerance"] = within_tolerance(
+            [row[forecast_field] for row in rows_], [row[actual_field] for row in rows_], tolerance
+        )
+        return result
+
+    precipitation = {
+        "day1": continuous_result(
+            baseline_daily, "forecast_precipitation_sum", "actual_precipitation_sum", 5.0
+        ),
+        "weighted_ensemble": continuous_result(
+            ensemble_daily, "forecast_precipitation_sum", "actual_precipitation_sum", 5.0
+        ),
+        "day1_rain_event": event_metrics(
+            [row["forecast_precipitation_sum"] for row in baseline_daily],
+            [row["actual_precipitation_sum"] for row in baseline_daily],
+            1.0,
+        ),
+        "weighted_ensemble_rain_event": event_metrics(
+            [row["forecast_precipitation_sum"] for row in ensemble_daily],
+            [row["actual_precipitation_sum"] for row in ensemble_daily],
+            1.0,
+        ),
+    }
+    return {
+        "method": {
+            "weights": {str(day): weight for day, weight in ENSEMBLE_WEIGHTS.items()},
+            "rolling_bias_window_days": BIAS_WINDOW_DAYS,
+            "minimum_history_days": BIAS_MIN_HISTORY,
+            "no_lookahead": True,
+            "hourly_bias_groups": "location + UTC hour",
+            "daily_bias_groups": "location",
+        },
+        "sample_counts": {
+            "common_hourly": len(ensemble_hourly),
+            "corrected_hourly": len(corrected_hourly),
+            "common_daily": len(ensemble_daily),
+            "corrected_daily": len(corrected_daily),
+        },
+        "temperature_2m": {
+            "day1": continuous_result(baseline_hourly, "forecast_temperature_2m", "actual_temperature_2m", 2.0),
+            "weighted_ensemble": continuous_result(ensemble_hourly, "forecast_temperature_2m", "actual_temperature_2m", 2.0),
+            "day1_matched_corrected_sample": continuous_result(matched_baseline_hourly, "forecast_temperature_2m", "actual_temperature_2m", 2.0),
+            "weighted_ensemble_rolling_bias": continuous_result(corrected_hourly, "corrected_forecast_temperature_2m", "actual_temperature_2m", 2.0),
+        },
+        "relative_humidity_2m": {
+            "day1": continuous_result(baseline_hourly, "forecast_relative_humidity_2m", "actual_relative_humidity_2m", 10.0),
+            "weighted_ensemble": continuous_result(ensemble_hourly, "forecast_relative_humidity_2m", "actual_relative_humidity_2m", 10.0),
+            "day1_matched_corrected_sample": continuous_result(matched_baseline_hourly, "forecast_relative_humidity_2m", "actual_relative_humidity_2m", 10.0),
+            "weighted_ensemble_rolling_bias": continuous_result(corrected_hourly, "corrected_forecast_relative_humidity_2m", "actual_relative_humidity_2m", 10.0),
+        },
+        "wind_speed_max_daily": {
+            "day1": continuous_result(baseline_daily, "forecast_wind_speed_max", "actual_wind_speed_max", 5.0),
+            "weighted_ensemble": continuous_result(ensemble_daily, "forecast_wind_speed_max", "actual_wind_speed_max", 5.0),
+            "day1_matched_corrected_sample": continuous_result(matched_baseline_daily, "forecast_wind_speed_max", "actual_wind_speed_max", 5.0),
+            "weighted_ensemble_rolling_bias": continuous_result(corrected_daily, "corrected_forecast_wind_speed_max", "actual_wind_speed_max", 5.0),
+        },
+        "precipitation_sum_daily": precipitation,
+    }
+
+
 def score(hourly: list[dict[str, Any]], daily: list[dict[str, Any]]) -> dict[str, Any]:
     result = {
         "hourly_rows": len(hourly),
@@ -338,6 +498,7 @@ def build_summary(hourly: list[dict[str, Any]], daily: list[dict[str, Any]], sta
         "excluded_incomplete_runs": {day.isoformat(): count for day, count in sorted(excluded.items())},
         "ranges": {},
         "locations": {},
+        "postprocessing": postprocessing_summary(hourly, daily),
     }
     for label, _, _ in LEAD_RANGES:
         summary["ranges"][label] = score(
@@ -370,6 +531,7 @@ def pct(value: float | None) -> str:
 
 def report_markdown(summary: dict[str, Any]) -> str:
     period = summary["period"]
+    post = summary["postprocessing"]
     lines = [
         "# Open-Meteo Forecast Backtest Report",
         "",
@@ -394,6 +556,26 @@ def report_markdown(summary: dict[str, Any]) -> str:
         lines.append(f"| {label} | {pct(rain['accuracy'])} | {pct(rain['precision'])} | {pct(rain['recall'])} | {pct(rain['f1'])} |")
     lines.extend([
         "",
+        "## Day-1/2/3 weighted ensemble and rolling bias correction",
+        "",
+        "For the same valid timestamp, the post-processed forecast is `0.60 × Day 1 + 0.30 × Day 2 + 0.10 × Day 3`. Temperature and relative humidity are then corrected using the previous 14 available errors for the same location and UTC hour. Daily maximum wind uses the previous 14 daily errors for the same location. A minimum of 7 prior observations is required, and the current observation is added only after its forecast is scored, preventing lookahead.",
+        "",
+        f"The corrected evaluation contains **{post['sample_counts']['corrected_hourly']:,} hourly** and **{post['sample_counts']['corrected_daily']:,} daily** samples after warm-up. Day-1 baselines below use exactly the same corrected-period samples.",
+        "",
+        "| Variable and tolerance | Day-1 baseline MAE / RMSE | Day-1 within tolerance | Weighted + rolling bias MAE / RMSE | Corrected within tolerance |",
+        "|---|---:|---:|---:|---:|",
+        f"| Temperature (±2°C) | {fmt(post['temperature_2m']['day1_matched_corrected_sample']['mae'])} / {fmt(post['temperature_2m']['day1_matched_corrected_sample']['rmse'])} | {pct(post['temperature_2m']['day1_matched_corrected_sample']['within_tolerance'])} | {fmt(post['temperature_2m']['weighted_ensemble_rolling_bias']['mae'])} / {fmt(post['temperature_2m']['weighted_ensemble_rolling_bias']['rmse'])} | **{pct(post['temperature_2m']['weighted_ensemble_rolling_bias']['within_tolerance'])}** |",
+        f"| Relative humidity (±10 percentage points) | {fmt(post['relative_humidity_2m']['day1_matched_corrected_sample']['mae'])} / {fmt(post['relative_humidity_2m']['day1_matched_corrected_sample']['rmse'])} | {pct(post['relative_humidity_2m']['day1_matched_corrected_sample']['within_tolerance'])} | {fmt(post['relative_humidity_2m']['weighted_ensemble_rolling_bias']['mae'])} / {fmt(post['relative_humidity_2m']['weighted_ensemble_rolling_bias']['rmse'])} | **{pct(post['relative_humidity_2m']['weighted_ensemble_rolling_bias']['within_tolerance'])}** |",
+        f"| Daily maximum wind (±5 km/h) | {fmt(post['wind_speed_max_daily']['day1_matched_corrected_sample']['mae'])} / {fmt(post['wind_speed_max_daily']['day1_matched_corrected_sample']['rmse'])} | {pct(post['wind_speed_max_daily']['day1_matched_corrected_sample']['within_tolerance'])} | {fmt(post['wind_speed_max_daily']['weighted_ensemble_rolling_bias']['mae'])} / {fmt(post['wind_speed_max_daily']['weighted_ensemble_rolling_bias']['rmse'])} | **{pct(post['wind_speed_max_daily']['weighted_ensemble_rolling_bias']['within_tolerance'])}** |",
+        "",
+        "Precipitation does not use rolling additive bias correction because it degraded performance in this sample. The weighted ensemble alone improves daily precipitation MAE and rain-day F1:",
+        "",
+        "| Precipitation metric | Day 1 | Weighted Day-1/2/3 ensemble |",
+        "|---|---:|---:|",
+        f"| Daily total MAE / RMSE (mm) | {fmt(post['precipitation_sum_daily']['day1']['mae'])} / {fmt(post['precipitation_sum_daily']['day1']['rmse'])} | **{fmt(post['precipitation_sum_daily']['weighted_ensemble']['mae'])} / {fmt(post['precipitation_sum_daily']['weighted_ensemble']['rmse'])}** |",
+        f"| Within ±5 mm | {pct(post['precipitation_sum_daily']['day1']['within_tolerance'])} | {pct(post['precipitation_sum_daily']['weighted_ensemble']['within_tolerance'])} |",
+        f"| Rain-day F1 | {pct(post['precipitation_sum_daily']['day1_rain_event']['f1'])} | **{pct(post['precipitation_sum_daily']['weighted_ensemble_rain_event']['f1'])}** |",
+        "",
         "## Interpretation",
         "",
         "- Forecast error increases with lead time. Temperature forecasts are strongest at 1–3 days and progressively weaker at 4–5 and 6–7 days.",
@@ -409,6 +591,7 @@ def report_markdown(summary: dict[str, Any]) -> str:
         "4. Aggregate precipitation by daily sum and wind speed by daily maximum.",
         "5. Exclude an entire model run if the Open-Meteo archive contains null forecast rows, preserving equal samples across lead days.",
         "6. Calculate MAE, RMSE, bias, correlation, temperature-within-±2°C rate, and rain-day classification metrics.",
+        "7. Build the lagged ensemble only from Day-1/2/3 forecasts sharing the same valid timestamp, then apply walk-forward rolling bias correction using past errors only.",
         "",
         "## Limitations",
         "",
@@ -416,6 +599,7 @@ def report_markdown(summary: dict[str, Any]) -> str:
         "- Only the daily 00:00 UTC ECMWF IFS run is evaluated.",
         "- Forecast and ERA5 grids differ in spatial resolution; precipitation is especially sensitive to this mismatch.",
         "- These three city coordinates do not represent every location within each province.",
+        "- Post-processing results are prequential within this 91-day period but still require confirmation on a later, untouched period before operational use.",
         "",
         f"Incomplete archived runs excluded: **{', '.join(summary['excluded_incomplete_runs']) or 'none'}**.",
         "",
