@@ -1,168 +1,168 @@
-# Open-Meteo Thailand Forecast Backtest
+# การทดสอบย้อนหลังพยากรณ์อากาศ Open-Meteo สำหรับประเทศไทย
 
-A reproducible, standard-library Python backtest of Open-Meteo ECMWF IFS forecasts for three cities in northeastern Thailand:
+โปรเจกต์นี้เป็นระบบ Backtest ที่รันซ้ำได้สำหรับตรวจสอบความแม่นยำของพยากรณ์ ECMWF IFS จาก Open-Meteo โดยใช้ Python standard library สำหรับตัวเมืองสามจังหวัดในภาคตะวันออกเฉียงเหนือของประเทศไทย:
 
-- Khon Kaen
-- Buriram
-- Chaiyaphum
+- ขอนแก่น
+- บุรีรัมย์
+- ชัยภูมิ
 
-The project evaluates fixed forecast lead ranges of **1–3 days**, **4–5 days**, and **6–7 days** for:
+โปรเจกต์ประเมินพยากรณ์ตามระยะล่วงหน้าแบบคงที่ ได้แก่ **1–3 วัน**, **4–5 วัน** และ **6–7 วัน** สำหรับตัวแปรต่อไปนี้:
 
-- 2 m air temperature
-- Daily precipitation total
-- Daily maximum 10 m wind speed
-- 2 m relative humidity
+- อุณหภูมิอากาศที่ความสูง 2 เมตร
+- ปริมาณน้ำฝนสะสมรายวัน
+- ความเร็วลมสูงสุดรายวันที่ความสูง 10 เมตร
+- ความชื้นสัมพัทธ์ที่ความสูง 2 เมตร
 
-Forecasts are retrieved from the [Open-Meteo Single Runs API](https://open-meteo.com/en/docs/single-runs-api) and verified against ERA5 from the [Open-Meteo Historical Weather API](https://open-meteo.com/en/docs/historical-weather-api).
+ข้อมูลพยากรณ์มาจาก [Open-Meteo Single Runs API](https://open-meteo.com/en/docs/single-runs-api) และตรวจสอบเทียบกับ ERA5 จาก [Open-Meteo Historical Weather API](https://open-meteo.com/en/docs/historical-weather-api)
 
-## Results
+## ผลการทดสอบ
 
-Backtest period: **2026-04-11 to 2026-07-10 UTC** (91 days).
+ช่วง Backtest: **11 เมษายน 2026 ถึง 10 กรกฎาคม 2026 UTC** รวม 91 วัน
 
-| Lead range | Temperature MAE / RMSE (°C) | Within ±2°C | Relative humidity MAE / RMSE (percentage points) | Daily precipitation MAE / RMSE (mm) | Daily maximum wind MAE / RMSE (km/h) |
+| ระยะพยากรณ์ | อุณหภูมิ MAE / RMSE (°C) | คลาดเคลื่อนไม่เกิน ±2°C | ความชื้น MAE / RMSE (จุดเปอร์เซ็นต์) | ฝนสะสมรายวัน MAE / RMSE (มม.) | ลมสูงสุดรายวัน MAE / RMSE (กม./ชม.) |
 |---|---:|---:|---:|---:|---:|
-| 1–3 days | 1.32 / 1.72 | 80.2% | 6.30 / 8.40 | 3.62 / 5.67 | 4.52 / 5.52 |
-| 4–5 days | 1.48 / 1.88 | 75.1% | 6.84 / 8.92 | 3.65 / 5.49 | 3.44 / 4.42 |
-| 6–7 days | 1.66 / 2.08 | 68.3% | 7.44 / 9.55 | 3.73 / 5.78 | 3.03 / 4.00 |
+| 1–3 วัน | 1.32 / 1.72 | 80.2% | 6.30 / 8.40 | 3.62 / 5.67 | 4.52 / 5.52 |
+| 4–5 วัน | 1.48 / 1.88 | 75.1% | 6.84 / 8.92 | 3.65 / 5.49 | 3.44 / 4.42 |
+| 6–7 วัน | 1.66 / 2.08 | 68.3% | 7.44 / 9.55 | 3.73 / 5.78 | 3.03 / 4.00 |
 
-### Rain-day detection
+### การตรวจจับวันที่ฝนตก
 
-A rain day is defined as daily precipitation ≥1 mm.
+กำหนดให้วันที่ฝนตกคือวันที่มีปริมาณน้ำฝนสะสมตั้งแต่ 1 มม. ขึ้นไป
 
-| Lead range | Accuracy | Precision | Recall | F1 |
+| ระยะพยากรณ์ | Accuracy | Precision | Recall | F1 |
 |---|---:|---:|---:|---:|
-| 1–3 days | 71.4% | 74.6% | 81.1% | 77.7% |
-| 4–5 days | 66.9% | 70.8% | 77.9% | 74.2% |
-| 6–7 days | 66.3% | 69.9% | 78.1% | 73.8% |
+| 1–3 วัน | 71.4% | 74.6% | 81.1% | 77.7% |
+| 4–5 วัน | 66.9% | 70.8% | 77.9% | 74.2% |
+| 6–7 วัน | 66.3% | 69.9% | 78.1% | 73.8% |
 
-Key findings:
+ข้อค้นพบสำคัญ:
 
-- Temperature skill degrades consistently with lead time: MAE rises from 1.32°C at 1–3 days to 1.66°C at 6–7 days.
-- The percentage of temperature forecasts within ±2°C falls from 80.2% to 68.3%.
-- Relative-humidity MAE rises from 6.30 to 7.44 percentage points.
-- Daily precipitation MAE rises slightly from 3.62 to 3.73 mm, while rain-day F1 falls from 77.7% to 73.8%.
-- Daily maximum wind error is not monotonic in this sample; it is highest in the 1–3-day range. This should not be interpreted as a general improvement at longer lead times.
+- ความแม่นยำของอุณหภูมิลดลงตามระยะพยากรณ์ โดย MAE เพิ่มจาก 1.32°C ที่ระยะ 1–3 วัน เป็น 1.66°C ที่ระยะ 6–7 วัน
+- สัดส่วนอุณหภูมิที่คลาดเคลื่อนไม่เกิน ±2°C ลดจาก 80.2% เหลือ 68.3%
+- MAE ของความชื้นสัมพัทธ์เพิ่มจาก 6.30 เป็น 7.44 จุดเปอร์เซ็นต์
+- MAE ของฝนสะสมรายวันเพิ่มเล็กน้อยจาก 3.62 เป็น 3.73 มม. ขณะที่ F1 ของการตรวจวันฝนตกลดจาก 77.7% เหลือ 73.8%
+- ความคลาดเคลื่อนของลมสูงสุดรายวันไม่ได้เพิ่มขึ้นตามระยะพยากรณ์อย่างสม่ำเสมอ โดยตัวอย่างนี้มี MAE สูงสุดในช่วง 1–3 วัน จึงไม่ควรตีความว่าลมแม่นยำขึ้นเมื่อพยากรณ์ไกลขึ้น
 
-## Weighted ensemble and rolling bias correction
+## Weighted ensemble และ Rolling bias correction
 
-The script also combines forecasts that target the same valid timestamp:
+สคริปต์รวมพยากรณ์ที่มี valid timestamp เดียวกันด้วยสูตร:
 
 ```text
 ensemble = 0.60 × Day 1 + 0.30 × Day 2 + 0.10 × Day 3
 ```
 
-For temperature and relative humidity, it subtracts the mean forecast error from the previous 14 available days for the same location and UTC hour. Daily maximum wind uses the previous 14 daily errors for the same location. Correction starts after at least 7 prior observations. The current observation is appended only after its forecast is scored, so future data cannot leak into the correction.
+สำหรับอุณหภูมิและความชื้นสัมพัทธ์ ระบบจะลบค่าเฉลี่ยความคลาดเคลื่อนจากข้อมูลย้อนหลัง 14 วันที่มีอยู่ โดยแยกตามจังหวัดและชั่วโมง UTC เดียวกัน ส่วนลมสูงสุดรายวันใช้ความคลาดเคลื่อนรายวันย้อนหลัง 14 วันของจังหวัดเดียวกัน ระบบจะเริ่มปรับแก้เมื่อมีประวัติอย่างน้อย 7 ค่า และจะเพิ่มค่าจริงของเวลาปัจจุบันเข้าในประวัติหลังจากวัดผลพยากรณ์แล้วเท่านั้น จึงไม่มีการรั่วไหลของข้อมูลอนาคตหรือ lookahead
 
-The corrected evaluation contains 5,616 hourly and 234 daily samples after warm-up. Day-1 baselines in this table use exactly the same timestamps:
+หลังตัดช่วง warm-up แล้ว มีตัวอย่างรายชั่วโมง 5,616 ค่า และตัวอย่างรายวัน 234 ค่า ค่า Day 1 baseline ในตารางใช้ timestamp ชุดเดียวกับวิธีที่ปรับแก้แล้ว เพื่อให้เปรียบเทียบอย่างเป็นธรรม:
 
-| Variable and tolerance | Day-1 baseline MAE / RMSE | Day-1 accuracy | Weighted + rolling bias MAE / RMSE | Corrected accuracy |
+| ตัวแปรและเกณฑ์ยอมรับ | Day 1 MAE / RMSE | ความแม่นยำ Day 1 | Weighted + rolling bias MAE / RMSE | ความแม่นยำหลังปรับแก้ |
 |---|---:|---:|---:|---:|
-| Temperature, ±2°C | 1.22 / 1.59°C | 83.6% | 0.97 / 1.29°C | **88.9%** |
-| Relative humidity, ±10 percentage points | 5.92 / 7.97 | 83.5% | 5.31 / 6.97 | **86.1%** |
-| Daily maximum wind, ±5 km/h | 4.68 / 5.69 km/h | 59.0% | 2.51 / 3.17 km/h | **90.2%** |
+| อุณหภูมิ ±2°C | 1.22 / 1.59°C | 83.6% | 0.97 / 1.29°C | **88.9%** |
+| ความชื้นสัมพัทธ์ ±10 จุดเปอร์เซ็นต์ | 5.92 / 7.97 | 83.5% | 5.31 / 6.97 | **86.1%** |
+| ลมสูงสุดรายวัน ±5 กม./ชม. | 4.68 / 5.69 กม./ชม. | 59.0% | 2.51 / 3.17 กม./ชม. | **90.2%** |
 
-Additive rolling bias correction is not applied to precipitation because it degraded precipitation performance in this sample. The weighted ensemble alone gives:
+ระบบไม่ใช้ additive rolling bias correction กับปริมาณน้ำฝน เนื่องจากทำให้ผลการพยากรณ์ฝนแย่ลงในชุดข้อมูลนี้ แต่ weighted ensemble เพียงอย่างเดียวให้ผลดังนี้:
 
-| Precipitation metric | Day 1 | Weighted Day-1/2/3 |
+| ตัวชี้วัดปริมาณน้ำฝน | Day 1 | Weighted Day 1/2/3 |
 |---|---:|---:|
-| Daily total MAE / RMSE | 3.53 / 5.81 mm | **3.25 / 5.17 mm** |
-| Within ±5 mm | 79.2% | 79.2% |
-| Rain-day F1 | 77.9% | **80.1%** |
+| ฝนสะสมรายวัน MAE / RMSE | 3.53 / 5.81 มม. | **3.25 / 5.17 มม.** |
+| คลาดเคลื่อนไม่เกิน ±5 มม. | 79.2% | 79.2% |
+| F1 ของการตรวจวันฝนตก | 77.9% | **80.1%** |
 
-These are walk-forward or prequential results within the same 91-day study period. They demonstrate no-lookahead performance, but a later untouched period is still required before claiming stable operational accuracy above 85%.
+ผลเหล่านี้เป็นการประเมินแบบ walk-forward หรือ prequential ภายในช่วงศึกษา 91 วันเดียวกัน แม้วิธีนี้จะไม่มีการใช้ข้อมูลอนาคต แต่ยังควรทดสอบกับช่วงเวลาใหม่ที่ไม่เคยใช้มาก่อน ก่อนสรุปว่าระบบมีความแม่นยำมากกว่า 85% อย่างสม่ำเสมอในการใช้งานจริง
 
-See [results/REPORT.md](results/REPORT.md) for the full methodology, interpretation, and limitations. Machine-readable metrics are in [results/summary.json](results/summary.json).
+อ่านวิธีการ การตีความ และข้อจำกัดโดยละเอียดได้ที่ [results/REPORT.md](results/REPORT.md) ส่วนค่าสรุปสำหรับโปรแกรมอยู่ใน [results/summary.json](results/summary.json)
 
-## Lead-time definition
+## นิยามระยะพยากรณ์
 
-This project uses one ECMWF IFS model run per day, initialized at 00:00 UTC:
+โปรเจกต์นี้ใช้ ECMWF IFS model run วันละหนึ่งรอบ โดยเริ่มต้นแบบจำลองเวลา 00:00 UTC:
 
-| Forecast day | Hours after initialization |
+| วันพยากรณ์ | ชั่วโมงหลังเริ่มต้นแบบจำลอง |
 |---:|---:|
-| Day 1 | 24–47 hours |
-| Day 2 | 48–71 hours |
-| Day 3 | 72–95 hours |
-| Day 4 | 96–119 hours |
-| Day 5 | 120–143 hours |
-| Day 6 | 144–167 hours |
-| Day 7 | 168–191 hours |
+| Day 1 | 24–47 ชั่วโมง |
+| Day 2 | 48–71 ชั่วโมง |
+| Day 3 | 72–95 ชั่วโมง |
+| Day 4 | 96–119 ชั่วโมง |
+| Day 5 | 120–143 ชั่วโมง |
+| Day 6 | 144–167 ชั่วโมง |
+| Day 7 | 168–191 ชั่วโมง |
 
-Grouping is performed only after each forecast hour is matched with ERA5 at the same UTC valid timestamp. This avoids mixing forecasts of unknown age.
+ระบบจะจัดกลุ่มระยะพยากรณ์หลังจากจับคู่ forecast hour กับ ERA5 ที่ valid timestamp เดียวกันใน UTC แล้วเท่านั้น เพื่อป้องกันการนำพยากรณ์ที่มีอายุต่างกันหรือมีเวลาเป้าหมายคนละเวลามาปะปนกัน
 
-## How the backtest works
+## ขั้นตอนการทำ Backtest
 
-1. Find the latest UTC day for which ERA5 has 24 complete hourly observations.
-2. Select the inclusive three-calendar-month verification window ending on that day.
-3. Retrieve every required ECMWF IFS 00:00 UTC model run from Open-Meteo's Single Runs API.
-4. Retrieve ERA5 temperature, precipitation, wind speed, and relative humidity for each location.
-5. Align forecast and reference data by UTC valid timestamp.
-6. Aggregate hourly precipitation into daily totals and hourly wind speed into daily maxima.
-7. Group forecasts into 1–3, 4–5, and 6–7 day ranges.
-8. Calculate MAE, RMSE, bias, correlation, temperature-within-±2°C, and rain-day classification metrics.
-9. Exclude an entire archived model run when any required forecast values are null, keeping sample counts balanced across lead days.
-10. Build a recency-weighted Day-1/2/3 lagged ensemble for matching valid timestamps and apply walk-forward rolling bias correction to temperature, humidity, and maximum wind.
+1. หาวัน UTC ล่าสุดที่ ERA5 มีข้อมูลรายชั่วโมงครบทั้ง 24 ชั่วโมง
+2. เลือกช่วงทดสอบย้อนหลังสามเดือนปฏิทินแบบรวมวันเริ่มต้นและวันสิ้นสุด
+3. ดาวน์โหลด ECMWF IFS model run เวลา 00:00 UTC ที่จำเป็นทั้งหมดผ่าน Open-Meteo Single Runs API
+4. ดาวน์โหลดอุณหภูมิ ปริมาณน้ำฝน ความเร็วลม และความชื้นสัมพัทธ์จาก ERA5 สำหรับแต่ละจังหวัด
+5. จับคู่ข้อมูลพยากรณ์และข้อมูลอ้างอิงด้วย valid timestamp แบบ UTC
+6. รวมฝนรายชั่วโมงเป็นฝนสะสมรายวัน และเลือกความเร็วลมรายชั่วโมงสูงสุดเป็นลมสูงสุดรายวัน
+7. จัดกลุ่มระยะพยากรณ์เป็น 1–3 วัน, 4–5 วัน และ 6–7 วัน
+8. คำนวณ MAE, RMSE, bias, correlation, สัดส่วนอุณหภูมิที่คลาดเคลื่อนไม่เกิน ±2°C และตัวชี้วัดการจำแนกวันฝนตก
+9. ตัด model run ทั้งรอบออก หาก archive มีค่าพยากรณ์ที่จำเป็นเป็น null เพื่อรักษาจำนวนตัวอย่างของแต่ละ lead day ให้สมดุล
+10. สร้าง lagged ensemble ของ Day 1/2/3 ที่มี valid timestamp เดียวกัน โดยให้น้ำหนักตามความใหม่ และใช้ walk-forward rolling bias correction กับอุณหภูมิ ความชื้น และลมสูงสุด
 
-For this run, the incomplete archives initialized on **2026-06-11** and **2026-06-23** were excluded. The final dataset contains **44,856 hourly forecast/reference pairs** and **1,869 daily forecast/reference pairs**.
+การรันครั้งนี้ตัด archive ที่เริ่มต้นในวันที่ **11 มิถุนายน 2026** และ **23 มิถุนายน 2026** ออก เนื่องจากข้อมูลไม่สมบูรณ์ ชุดข้อมูลสุดท้ายมี forecast/reference pair รายชั่วโมง **44,856 คู่** และรายวัน **1,869 คู่**
 
-## Requirements
+## สิ่งที่ต้องมี
 
-- Python 3.10 or later
+- Python 3.10 หรือใหม่กว่า
 - `curl`
-- Internet access to Open-Meteo APIs
+- อินเทอร์เน็ตสำหรับเรียก Open-Meteo API
 
-No third-party Python packages are required.
+ไม่ต้องติดตั้ง Python package จากภายนอก
 
-## Run
+## วิธีรัน
 
 ```bash
 python3 backtest.py
 ```
 
-The first run downloads and caches API responses under `data/raw/`. Later runs reuse the cache.
+การรันครั้งแรกจะดาวน์โหลดและเก็บ API response ไว้ที่ `data/raw/` การรันครั้งต่อไปจะใช้ cache นี้
 
-Force a fresh download:
+บังคับดาวน์โหลดข้อมูลใหม่:
 
 ```bash
 python3 backtest.py --refresh
 ```
 
-Use a fixed verification end date:
+กำหนดวันสิ้นสุดของช่วงทดสอบเอง:
 
 ```bash
 python3 backtest.py --end-date 2026-07-10
 ```
 
-Control concurrent API requests:
+กำหนดจำนวน API request ที่ทำพร้อมกัน:
 
 ```bash
 python3 backtest.py --workers 2
 ```
 
-Generated files:
+ไฟล์ที่ระบบสร้าง:
 
-- `results/REPORT.md` — human-readable report
-- `results/summary.json` — machine-readable metrics
-- `data/hourly.csv` — aligned hourly forecast/reference rows (git-ignored)
-- `data/daily.csv` — daily aggregations (git-ignored)
-- `data/raw/` — cached API responses (git-ignored)
+- `results/REPORT.md` — รายงานสำหรับอ่าน
+- `results/summary.json` — ค่าสรุปสำหรับโปรแกรม
+- `data/hourly.csv` — ข้อมูลพยากรณ์และอ้างอิงรายชั่วโมงที่จับคู่แล้ว ไม่ถูกเก็บใน Git
+- `data/daily.csv` — ข้อมูลสรุปรายวัน ไม่ถูกเก็บใน Git
+- `data/raw/` — API response ที่ cache ไว้ ไม่ถูกเก็บใน Git
 
-## Test
+## การทดสอบ
 
 ```bash
 python3 -m unittest -v
 ```
 
-The tests cover calendar-window selection, fixed lead-day assignment, lead-range grouping, expected balanced sample counts, metric calculations, weighted ensemble construction, and no-lookahead rolling bias correction.
+Unit tests ครอบคลุมการเลือกช่วงสามเดือนปฏิทิน การคำนวณ lead day การจัดกลุ่มระยะพยากรณ์ การตรวจจำนวนตัวอย่างที่สมดุล การคำนวณ metrics การสร้าง weighted ensemble และ rolling bias correction แบบไม่มี lookahead
 
-## Important limitations
+## ข้อจำกัดสำคัญ
 
-- ERA5 is gridded reanalysis, not a surface station observation.
-- Only ECMWF IFS runs initialized at 00:00 UTC are evaluated.
-- Forecast and reference products use different grids; this especially affects convective precipitation.
-- City-center coordinates do not represent all locations within each province.
-- Results describe this model, period, initialization cycle, and reference dataset; they should not be generalized without additional validation.
-- Post-processing is evaluated prequentially within this period; confirm it on a later untouched period before operational use.
+- ERA5 เป็นข้อมูล reanalysis แบบกริด ไม่ใช่ค่าตรวจวัดจากสถานีอากาศภาคพื้นดิน
+- ประเมินเฉพาะ ECMWF IFS run ที่เริ่มเวลา 00:00 UTC เท่านั้น
+- ข้อมูลพยากรณ์และข้อมูลอ้างอิงมีความละเอียดกริดต่างกัน ซึ่งมีผลมากเป็นพิเศษกับฝนจากการพาความร้อน
+- พิกัดตัวเมืองทั้งสามแห่งไม่สามารถแทนทุกพื้นที่ภายในแต่ละจังหวัดได้
+- ผลลัพธ์นี้อธิบายเฉพาะโมเดล ช่วงเวลา รอบเริ่มต้น และข้อมูลอ้างอิงที่ใช้ ไม่ควรนำไปสรุปทั่วไปโดยไม่มีการตรวจสอบเพิ่มเติม
+- ผล post-processing เป็นการประเมินแบบ prequential ภายในช่วงข้อมูลนี้ ควรยืนยันกับช่วงเวลาใหม่ที่ไม่เคยใช้มาก่อนก่อนนำไปใช้จริง
 
-## License
+## สัญญาอนุญาต
 
 MIT
